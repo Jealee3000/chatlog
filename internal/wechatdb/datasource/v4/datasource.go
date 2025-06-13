@@ -366,13 +366,13 @@ func (ds *DataSource) GetContacts(ctx context.Context, key string, limit, offset
 
 	if key != "" {
 		// 按照关键字查询
-		query = `SELECT username, local_type, alias, remark, nick_name 
+		query = `SELECT username, local_type, alias, remark, nick_name, small_head_url 
 				FROM contact 
 				WHERE username = ? OR alias = ? OR remark = ? OR nick_name = ?`
 		args = []interface{}{key, key, key, key}
 	} else {
 		// 查询所有联系人
-		query = `SELECT username, local_type, alias, remark, nick_name FROM contact`
+		query = `SELECT username, local_type, alias, remark, nick_name, small_head_url FROM contact`
 	}
 
 	// 添加排序、分页
@@ -404,6 +404,7 @@ func (ds *DataSource) GetContacts(ctx context.Context, key string, limit, offset
 			&contactV4.Alias,
 			&contactV4.Remark,
 			&contactV4.NickName,
+			&contactV4.HeadImg,
 		)
 
 		if err != nil {
@@ -686,7 +687,6 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 
 	stats := []*model.ChatRoomMemberStats{}
 	messageCountMap := make(map[string]int)
-	headUrlMap := make(map[string]string)
 
 	// 从每个相关数据库中查询消息统计
 	for _, dbInfo := range dbInfos {
@@ -722,12 +722,12 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 
 		// 查询群聊成员发言统计
 		query := fmt.Sprintf(`
-			SELECT n.user_name as sender, n.small_head_url, COUNT(*) as message_count
+			SELECT n.user_name as sender, COUNT(*) as message_count
 			FROM %s m
 			LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid
 			WHERE m.create_time >= ? AND m.create_time <= ?
 			  AND n.user_name != '' AND n.user_name IS NOT NULL
-			GROUP BY n.user_name, n.small_head_url
+			GROUP BY n.user_name
 		`, tableName)
 
 		rows, err := db.QueryContext(ctx, query, startTime.Unix(), endTime.Unix())
@@ -744,28 +744,39 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 		// 累计每个用户的消息数量
 		for rows.Next() {
 			var sender string
-			var smallHeadUrl sql.NullString
 			var messageCount int
-			err := rows.Scan(&sender, &smallHeadUrl, &messageCount)
+			err := rows.Scan(&sender, &messageCount)
 			if err != nil {
 				continue
 			}
 			messageCountMap[sender] += messageCount
-			// 保存头像信息（如果存在的话）
-			if smallHeadUrl.Valid && smallHeadUrl.String != "" {
-				headUrlMap[sender] = smallHeadUrl.String
-			}
 		}
 		rows.Close()
 	}
 
 	// 将统计结果转换为模型
 	for sender, messageCount := range messageCountMap {
+		// 从联系人表获取详细信息
+		contacts, err := ds.GetContacts(ctx, sender, 1, 0)
+		var displayName, nickName, smallHeadUrl string
+		if err == nil && len(contacts) > 0 {
+			contact := contacts[0]
+			displayName = contact.Remark
+			if displayName == "" {
+				displayName = contact.NickName
+			}
+			if displayName == "" {
+				displayName = sender
+			}
+			nickName = contact.NickName
+			smallHeadUrl = contact.HeadImg
+		}
+
 		stat := &model.ChatRoomMemberStats{
 			UserName:     sender,
-			DisplayName:  sender, // 暂时使用sender作为显示名称
-			NickName:     "",     // 需要从联系人信息中获取
-			SmallHeadUrl: headUrlMap[sender], // 用户头像URL
+			DisplayName:  displayName,
+			NickName:     nickName,
+			SmallHeadUrl: smallHeadUrl,
 			MessageCount: messageCount,
 		}
 		stats = append(stats, stat)

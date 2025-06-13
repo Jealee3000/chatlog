@@ -5,7 +5,7 @@ type Contact struct {
 	Alias    string `json:"alias"`
 	Remark   string `json:"remark"`
 	NickName string `json:"nickName"`
-	HeadImg  string `json:"SmallHeadImgUrl"`
+	HeadImg  string `json:"smallHeadImgUrl"`
 	IsFriend bool   `json:"isFriend"`
 }
 
