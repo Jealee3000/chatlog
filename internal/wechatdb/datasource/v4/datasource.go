@@ -672,6 +672,113 @@ func (ds *DataSource) GetMedia(ctx context.Context, _type string, key string) (*
 	return media, nil
 }
 
+// GetChatRoomMemberStats 获取群聊成员发言统计
+func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+	if chatRoomName == "" {
+		return nil, errors.ErrTalkerEmpty
+	}
+
+	// 找到时间范围内的数据库文件
+	dbInfos := ds.getDBInfosForTimeRange(startTime, endTime)
+	if len(dbInfos) == 0 {
+		return nil, errors.TimeRangeNotFound(startTime, endTime)
+	}
+
+	stats := []*model.ChatRoomMemberStats{}
+	messageCountMap := make(map[string]int)
+	headUrlMap := make(map[string]string)
+
+	// 从每个相关数据库中查询消息统计
+	for _, dbInfo := range dbInfos {
+		// 检查上下文是否已取消
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		db, err := ds.dbm.OpenDB(dbInfo.FilePath)
+		if err != nil {
+			log.Error().Msgf("数据库 %s 未打开", dbInfo.FilePath)
+			continue
+		}
+
+		// 构建表名
+		_talkerMd5Bytes := md5.Sum([]byte(chatRoomName))
+		talkerMd5 := hex.EncodeToString(_talkerMd5Bytes[:])
+		tableName := "Msg_" + talkerMd5
+
+		// 检查表是否存在
+		var exists bool
+		err = db.QueryRowContext(ctx,
+			"SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+			tableName).Scan(&exists)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				// 表不存在，继续下一个数据库
+				continue
+			}
+			return nil, errors.QueryFailed("", err)
+		}
+
+		// 查询群聊成员发言统计
+		query := fmt.Sprintf(`
+			SELECT n.user_name as sender, n.small_head_url, COUNT(*) as message_count
+			FROM %s m
+			LEFT JOIN Name2Id n ON m.real_sender_id = n.rowid
+			WHERE m.create_time >= ? AND m.create_time <= ?
+			  AND n.user_name != '' AND n.user_name IS NOT NULL
+			GROUP BY n.user_name, n.small_head_url
+		`, tableName)
+
+		rows, err := db.QueryContext(ctx, query, startTime.Unix(), endTime.Unix())
+		if err != nil {
+			// 如果表不存在，SQLite 会返回错误
+			if strings.Contains(err.Error(), "no such table") {
+				continue
+			}
+			log.Err(err).Msgf("从数据库 %s 查询消息统计失败", dbInfo.FilePath)
+			continue
+		}
+		defer rows.Close()
+
+		// 累计每个用户的消息数量
+		for rows.Next() {
+			var sender string
+			var smallHeadUrl sql.NullString
+			var messageCount int
+			err := rows.Scan(&sender, &smallHeadUrl, &messageCount)
+			if err != nil {
+				continue
+			}
+			messageCountMap[sender] += messageCount
+			// 保存头像信息（如果存在的话）
+			if smallHeadUrl.Valid && smallHeadUrl.String != "" {
+				headUrlMap[sender] = smallHeadUrl.String
+			}
+		}
+		rows.Close()
+	}
+
+	// 将统计结果转换为模型
+	for sender, messageCount := range messageCountMap {
+		stat := &model.ChatRoomMemberStats{
+			UserName:     sender,
+			DisplayName:  sender, // 暂时使用sender作为显示名称
+			NickName:     "",     // 需要从联系人信息中获取
+			SmallHeadUrl: headUrlMap[sender], // 用户头像URL
+			MessageCount: messageCount,
+		}
+		stats = append(stats, stat)
+	}
+
+	// 按消息数量降序排序
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].MessageCount > stats[j].MessageCount
+	})
+
+	return stats, nil
+}
+
 func (ds *DataSource) GetVoice(ctx context.Context, key string) (*model.Media, error) {
 	if key == "" {
 		return nil, errors.ErrKeyEmpty

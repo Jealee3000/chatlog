@@ -346,6 +346,7 @@
             <div class="tab" data-tab="chatroom">群聊</div>
             <div class="tab" data-tab="contact">联系人</div>
             <div class="tab" data-tab="chatlog">聊天记录</div>
+            <div class="tab" data-tab="chatroomstats">群聊统计</div>
           </div>
 
           <!-- 会话查询表单 -->
@@ -504,6 +505,50 @@
             </div>
           </div>
 
+          <!-- 群聊统计查询表单 -->
+          <div class="tab-content" id="chatroomstats-tab">
+            <div class="api-description">
+              <p>
+                查询指定群聊在特定时间范围内的成员发言统计。<span
+                  class="badge"
+                  >GET /api/v1/chatroom/:name/stats</span
+                >
+              </p>
+            </div>
+            <div class="form-group">
+              <label for="chatroom-name"
+                >群聊名称：<span class="required-field">*</span></label
+              >
+              <select id="chatroom-name">
+                <option value="">请选择群聊...</option>
+              </select>
+              <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                <span id="chatroom-loading" style="display: none;">正在加载群聊列表...</span>
+                <span id="chatroom-error" style="display: none; color: #e74c3c;">加载群聊列表失败</span>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="stats-time"
+                >时间范围：<span class="required-field">*</span></label
+              >
+              <input
+                type="text"
+                id="stats-time"
+                placeholder="例如：2023-01-01 或 2023-01-01~2023-01-31"
+              />
+            </div>
+            <div class="form-group">
+              <label for="stats-format"
+                >输出格式：<span class="optional-param">可选</span></label
+              >
+              <select id="stats-format">
+                <option value="">默认</option>
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+              </select>
+            </div>
+          </div>
+
           <button id="test-api">执行查询</button>
 
           <div id="result-wrapper" style="display: none; margin-top: 20px">
@@ -586,6 +631,11 @@
           // 显示当前标签对应的内容
           const tabId = this.getAttribute("data-tab") + "-tab";
           document.getElementById(tabId).classList.add("active");
+
+          // 如果切换到群聊统计标签，加载群聊列表
+          if (this.getAttribute("data-tab") === "chatroomstats") {
+            loadChatroomList();
+          }
 
           // 清空结果区域
           document.getElementById("result-wrapper").style.display = "none";
@@ -675,6 +725,24 @@
 
                 if (sessionFormat) params.append("format", sessionFormat);
                 break;
+
+              case "chatroomstats":
+                const chatroomName = document.getElementById("chatroom-name").value;
+                const statsTime = document.getElementById("stats-time").value;
+                const statsFormat = document.getElementById("stats-format").value;
+
+                // 验证必填项
+                if (!chatroomName || !statsTime) {
+                  errorMessage.textContent =
+                    "错误: 群聊名称和时间范围为必填项！";
+                  errorMessage.style.display = "block";
+                  return;
+                }
+
+                url += `chatroom/${encodeURIComponent(chatroomName)}/stats`;
+                if (statsTime) params.append("time", statsTime);
+                if (statsFormat) params.append("format", statsFormat);
+                break;
             }
 
             // 添加参数到URL
@@ -751,6 +819,51 @@
           .catch((err) => {
             console.error("复制失败:", err);
           });
+      }
+
+      // 加载群聊列表
+      async function loadChatroomList() {
+        const select = document.getElementById("chatroom-name");
+        const loadingSpan = document.getElementById("chatroom-loading");
+        const errorSpan = document.getElementById("chatroom-error");
+
+        // 如果已经加载过且有选项，则不重复加载
+        if (select.options.length > 1) {
+          return;
+        }
+
+        // 显示加载状态
+        loadingSpan.style.display = "inline";
+        errorSpan.style.display = "none";
+
+        try {
+          const response = await fetch("/api/v1/chatroom?format=json");
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          
+          // 清空现有选项（保留默认选项）
+          select.innerHTML = '<option value="">请选择群聊...</option>';
+
+          // 添加群聊选项
+          if (data && data.items && Array.isArray(data.items)) {
+            data.items.forEach(chatroom => {
+              const option = document.createElement("option");
+              option.value = chatroom.name || chatroom.nickName;
+              option.textContent = `${chatroom.nickName || chatroom.name} (${chatroom.name})`;
+              select.appendChild(option);
+            });
+          }
+
+          loadingSpan.style.display = "none";
+        } catch (error) {
+          console.error("加载群聊列表失败:", error);
+          loadingSpan.style.display = "none";
+          errorSpan.style.display = "inline";
+          errorSpan.textContent = `加载失败: ${error.message}`;
+        }
       }
     </script>
   </body>

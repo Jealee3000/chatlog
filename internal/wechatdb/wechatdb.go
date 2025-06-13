@@ -124,3 +124,9 @@ func (w *DB) GetSessions(key string, limit, offset int) (*GetSessionsResp, error
 func (w *DB) GetMedia(_type string, key string) (*model.Media, error) {
 	return w.repo.GetMedia(context.Background(), _type, key)
 }
+
+// GetChatRoomMemberStats 获取群聊成员发言统计
+func (w *DB) GetChatRoomMemberStats(chatRoomName string, start, end time.Time) (*model.GetChatRoomMemberStatsResp, error) {
+	ctx := context.Background()
+	return w.repo.GetChatRoomMemberStats(ctx, chatRoomName, start, end)
+}

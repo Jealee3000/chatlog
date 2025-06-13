@@ -53,6 +53,7 @@ func (s *Service) initRouter() {
 		api.GET("/chatlog", s.GetChatlog)
 		api.GET("/contact", s.GetContacts)
 		api.GET("/chatroom", s.GetChatRooms)
+		api.GET("/chatroom/:name/stats", s.GetChatRoomMemberStats)
 		api.GET("/session", s.GetSessions)
 	}
 
@@ -386,4 +387,58 @@ func (s *Service) HandleVoice(c *gin.Context, data []byte) {
 		return
 	}
 	c.Data(http.StatusOK, "audio/mp3", out)
+}
+
+// GetChatRoomMemberStats 获取群聊成员发言统计
+func (s *Service) GetChatRoomMemberStats(c *gin.Context) {
+	chatRoomName := c.Param("name")
+	if chatRoomName == "" {
+		errors.Err(c, errors.InvalidArg("name"))
+		return
+	}
+
+	q := struct {
+		Time   string `form:"time"`
+		Format string `form:"format"`
+	}{}
+
+	if err := c.BindQuery(&q); err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	// 解析时间范围
+	start, end, ok := util.TimeRangeOf(q.Time)
+	if !ok {
+		errors.Err(c, errors.InvalidArg("time"))
+		return
+	}
+
+	// 获取群聊成员统计
+	stats, err := s.db.GetChatRoomMemberStats(chatRoomName, start, end)
+	if err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	// 根据格式返回数据
+	format := strings.ToLower(q.Format)
+	switch format {
+	case "json":
+		c.JSON(http.StatusOK, stats)
+	case "csv":
+		c.Writer.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Flush()
+
+		c.Writer.WriteString("UserName,DisplayName,NickName,MessageCount\n")
+		for _, stat := range stats.Stats {
+			c.Writer.WriteString(fmt.Sprintf("%s,%s,%s,%d\n", stat.UserName, stat.DisplayName, stat.NickName, stat.MessageCount))
+		}
+		c.Writer.Flush()
+	default:
+		// 默认返回JSON格式
+		c.JSON(http.StatusOK, stats)
+	}
 }

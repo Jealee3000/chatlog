@@ -61,6 +61,11 @@ func (s *Service) GetMedia(_type string, key string) (*model.Media, error) {
 	return s.db.GetMedia(_type, key)
 }
 
+// GetChatRoomMemberStats 获取群聊成员发言统计
+func (s *Service) GetChatRoomMemberStats(chatRoomName string, start, end time.Time) (*model.GetChatRoomMemberStatsResp, error) {
+	return s.db.GetChatRoomMemberStats(chatRoomName, start, end)
+}
+
 // Close closes the database connection
 func (s *Service) Close() {
 	// Add cleanup code if needed

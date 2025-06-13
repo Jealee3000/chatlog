@@ -723,6 +723,55 @@ func (ds *DataSource) GetMedia(ctx context.Context, _type string, key string) (*
 	return media, nil
 }
 
+// GetChatRoomMemberStats 获取群聊成员发言统计
+func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+	if chatRoomName == "" {
+		return nil, errors.ErrTalkerEmpty
+	}
+
+	// 查询群聊成员发言统计
+	query := `
+		SELECT StrTalker as sender, COUNT(*) as message_count
+		FROM MSG 
+		WHERE StrTalker = ? 
+		  AND CreateTime >= ? AND CreateTime <= ?
+		  AND StrTalker != '' AND StrTalker IS NOT NULL
+		GROUP BY StrTalker
+		ORDER BY message_count DESC
+	`
+
+	db, err := ds.dbm.GetDB(Message)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, query, chatRoomName, startTime.Unix(), endTime.Unix())
+	if err != nil {
+		return nil, errors.QueryFailed(query, err)
+	}
+	defer rows.Close()
+
+	stats := []*model.ChatRoomMemberStats{}
+	for rows.Next() {
+		var sender string
+		var messageCount int
+		err := rows.Scan(&sender, &messageCount)
+		if err != nil {
+			continue
+		}
+
+		stat := &model.ChatRoomMemberStats{
+			UserName:     sender,
+			DisplayName:  sender, // 暂时使用sender作为显示名称
+			NickName:     "",     // 需要从联系人信息中获取
+			MessageCount: messageCount,
+		}
+		stats = append(stats, stat)
+	}
+
+	return stats, nil
+}
+
 func (ds *DataSource) GetVoice(ctx context.Context, key string) (*model.Media, error) {
 	if key == "" {
 		return nil, errors.ErrKeyEmpty

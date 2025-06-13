@@ -24,6 +24,9 @@ type DataSource interface {
 	// 群聊
 	GetChatRooms(ctx context.Context, key string, limit, offset int) ([]*model.ChatRoom, error)
 
+	// 群聊成员统计
+	GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error)
+
 	// 最近会话
 	GetSessions(ctx context.Context, key string, limit, offset int) ([]*model.Session, error)
 

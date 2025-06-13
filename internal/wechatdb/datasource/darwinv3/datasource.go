@@ -648,6 +648,64 @@ WHERE
 	return media, nil
 }
 
+// GetChatRoomMemberStats 获取群聊成员发言统计
+func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+	if chatRoomName == "" {
+		return nil, errors.ErrTalkerEmpty
+	}
+
+	// 在 darwinv3 中，需要先找到对应的数据库
+	_talkerMd5Bytes := md5.Sum([]byte(chatRoomName))
+	talkerMd5 := hex.EncodeToString(_talkerMd5Bytes[:])
+	dbPath, ok := ds.talkerDBMap[talkerMd5]
+	if !ok {
+		return nil, errors.QueryFailed("chatroom not found", nil)
+	}
+
+	db, err := ds.dbm.OpenDB(dbPath)
+	if err != nil {
+		return nil, errors.QueryFailed("failed to open database", err)
+	}
+
+	tableName := fmt.Sprintf("Chat_%s", talkerMd5)
+
+	// 查询群聊成员发言统计
+	query := fmt.Sprintf(`
+		SELECT mesDes as sender, COUNT(*) as message_count
+		FROM %s 
+		WHERE msgCreateTime >= ? AND msgCreateTime <= ?
+		  AND mesDes != '' AND mesDes IS NOT NULL
+		GROUP BY mesDes
+		ORDER BY message_count DESC
+	`, tableName)
+
+	rows, err := db.QueryContext(ctx, query, startTime.Unix(), endTime.Unix())
+	if err != nil {
+		return nil, errors.QueryFailed(query, err)
+	}
+	defer rows.Close()
+
+	stats := []*model.ChatRoomMemberStats{}
+	for rows.Next() {
+		var sender string
+		var messageCount int
+		err := rows.Scan(&sender, &messageCount)
+		if err != nil {
+			continue
+		}
+
+		stat := &model.ChatRoomMemberStats{
+			UserName:     sender,
+			DisplayName:  sender, // 暂时使用sender作为显示名称
+			NickName:     "",     // 需要从联系人信息中获取
+			MessageCount: messageCount,
+		}
+		stats = append(stats, stat)
+	}
+
+	return stats, nil
+}
+
 // Close 实现关闭数据库连接的方法
 func (ds *DataSource) Close() error {
 	return ds.dbm.Close()
