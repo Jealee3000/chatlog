@@ -38,9 +38,10 @@ func (r *Repository) EnrichMessages(ctx context.Context, messages []*model.Messa
 }
 
 // GetChatRoomMemberStats 获取群聊成员发言统计
-func (r *Repository) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) (*model.GetChatRoomMemberStatsResp, error) {
+// GetChatRoomMemberMessageStats 获取群聊成员发言统计
+func (r *Repository) GetChatRoomMemberMessageStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) (*model.GetChatRoomMemberMessageStatsResp, error) {
 	// 调用数据源获取原始统计数据
-	stats, err := r.ds.GetChatRoomMemberStats(ctx, chatRoomName, startTime, endTime)
+	stats, err := r.ds.GetChatRoomMemberMessageStats(ctx, chatRoomName, startTime, endTime)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +77,7 @@ func (r *Repository) GetChatRoomMemberStats(ctx context.Context, chatRoomName st
 	}
 
 	// 构建响应
-	resp := &model.GetChatRoomMemberStatsResp{
+	resp := &model.GetChatRoomMemberMessageStatsResp{
 		ChatRoomName:  chatRoomDisplayName,
 		TotalMembers:  0, // 需要从群聊信息中获取
 		ActiveMembers: activeMembers,
@@ -91,6 +92,66 @@ func (r *Repository) GetChatRoomMemberStats(ctx context.Context, chatRoomName st
 	}
 
 	return resp, nil
+}
+
+// GetChatRoomMemberInviteStats 获取群聊成员邀请统计
+func (r *Repository) GetChatRoomMemberInviteStats(ctx context.Context, chatRoomName string) (*model.GetChatRoomMemberInviteStatsResp, error) {
+	// 调用数据源获取原始统计数据
+	stats, err := r.ds.GetChatRoomMemberInviteStats(ctx, chatRoomName)
+	if err != nil {
+		return nil, err
+	}
+
+	// 补充用户信息
+	for _, stat := range stats {
+		// 从联系人缓存中获取用户信息
+		if contact, ok := r.contactCache[stat.UserName]; ok {
+			if contact.NickName != "" {
+				stat.NickName = contact.NickName
+			}
+		}
+
+		// 从群聊缓存中获取显示名称
+		if chatRoom, ok := r.chatRoomCache[chatRoomName]; ok {
+			if displayName, ok := chatRoom.User2DisplayName[stat.UserName]; ok {
+				stat.DisplayName = displayName
+			}
+		}
+	}
+
+	// 获取群聊信息
+	chatRoomDisplayName := chatRoomName
+	if chatRoom, ok := r.chatRoomCache[chatRoomName]; ok {
+		chatRoomDisplayName = chatRoom.DisplayName()
+	}
+
+	// 过滤掉邀请数为0的记录
+	filteredStats := make([]*model.ChatRoomMemberInviteStats, 0)
+	for _, stat := range stats {
+		if stat.InviteCount > 0 {
+			filteredStats = append(filteredStats, stat)
+		}
+	}
+
+	// 构建响应
+	resp := &model.GetChatRoomMemberInviteStatsResp{
+		ChatRoomName: chatRoomDisplayName,
+		TotalMembers: 0, // 需要从群聊信息中获取
+		TimeRange:    "全部时间", // 邀请统计不依赖时间范围
+		Stats:        filteredStats,
+	}
+
+	// 获取群聊总成员数
+	if chatRoom, ok := r.chatRoomCache[chatRoomName]; ok {
+		resp.TotalMembers = len(chatRoom.Users)
+	}
+
+	return resp, nil
+}
+
+// GetChatRoomMemberStats 为了向后兼容，保留原有方法名
+func (r *Repository) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) (*model.GetChatRoomMemberStatsResp, error) {
+	return r.GetChatRoomMemberMessageStats(ctx, chatRoomName, startTime, endTime)
 }
 
 // enrichMessage 补充单条消息的额外信息

@@ -66,6 +66,16 @@ func (s *Service) GetChatRoomMemberStats(chatRoomName string, start, end time.Ti
 	return s.db.GetChatRoomMemberStats(chatRoomName, start, end)
 }
 
+// GetChatRoomMemberMessageStats 获取群聊成员发言统计
+func (s *Service) GetChatRoomMemberMessageStats(chatRoomName string, start, end time.Time) (*model.GetChatRoomMemberMessageStatsResp, error) {
+	return s.db.GetChatRoomMemberMessageStats(chatRoomName, start, end)
+}
+
+// GetChatRoomMemberInviteStats 获取群聊成员邀请统计
+func (s *Service) GetChatRoomMemberInviteStats(chatRoomName string) (*model.GetChatRoomMemberInviteStatsResp, error) {
+	return s.db.GetChatRoomMemberInviteStats(chatRoomName)
+}
+
 // Close closes the database connection
 func (s *Service) Close() {
 	// Add cleanup code if needed

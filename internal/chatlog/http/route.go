@@ -53,7 +53,9 @@ func (s *Service) initRouter() {
 		api.GET("/chatlog", s.GetChatlog)
 		api.GET("/contact", s.GetContacts)
 		api.GET("/chatroom", s.GetChatRooms)
-		api.GET("/chatroom/:name/stats", s.GetChatRoomMemberStats)
+		api.GET("/chatroom/:name/stats", s.GetChatRoomMemberStats)                // 向后兼容
+		api.GET("/chatroom/:name/message-stats", s.GetChatRoomMemberMessageStats) // 发言统计
+		api.GET("/chatroom/:name/invite-stats", s.GetChatRoomMemberInviteStats)   // 邀请统计
 		api.GET("/session", s.GetSessions)
 	}
 
@@ -435,6 +437,106 @@ func (s *Service) GetChatRoomMemberStats(c *gin.Context) {
 		c.Writer.WriteString("UserName,DisplayName,NickName,MessageCount\n")
 		for _, stat := range stats.Stats {
 			c.Writer.WriteString(fmt.Sprintf("%s,%s,%s,%d\n", stat.UserName, stat.DisplayName, stat.NickName, stat.MessageCount))
+		}
+		c.Writer.Flush()
+	default:
+		// 默认返回JSON格式
+		c.JSON(http.StatusOK, stats)
+	}
+}
+
+// GetChatRoomMemberMessageStats 获取群聊成员发言统计
+func (s *Service) GetChatRoomMemberMessageStats(c *gin.Context) {
+	chatRoomName := c.Param("name")
+	if chatRoomName == "" {
+		errors.Err(c, errors.InvalidArg("name"))
+		return
+	}
+
+	q := struct {
+		Time   string `form:"time"`
+		Format string `form:"format"`
+	}{}
+
+	if err := c.BindQuery(&q); err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	// 解析时间范围
+	start, end, ok := util.TimeRangeOf(q.Time)
+	if !ok {
+		errors.Err(c, errors.InvalidArg("time"))
+		return
+	}
+
+	// 获取群聊成员发言统计
+	stats, err := s.db.GetChatRoomMemberMessageStats(chatRoomName, start, end)
+	if err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	// 根据格式返回数据
+	format := strings.ToLower(q.Format)
+	switch format {
+	case "json":
+		c.JSON(http.StatusOK, stats)
+	case "csv":
+		c.Writer.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Flush()
+
+		c.Writer.WriteString("UserName,DisplayName,NickName,MessageCount\n")
+		for _, stat := range stats.Stats {
+			c.Writer.WriteString(fmt.Sprintf("%s,%s,%s,%d\n", stat.UserName, stat.DisplayName, stat.NickName, stat.MessageCount))
+		}
+		c.Writer.Flush()
+	default:
+		// 默认返回JSON格式
+		c.JSON(http.StatusOK, stats)
+	}
+}
+
+// GetChatRoomMemberInviteStats 获取群聊成员邀请统计
+func (s *Service) GetChatRoomMemberInviteStats(c *gin.Context) {
+	chatRoomName := c.Param("name")
+	if chatRoomName == "" {
+		errors.Err(c, errors.InvalidArg("name"))
+		return
+	}
+
+	q := struct {
+		Format string `form:"format"`
+	}{}
+
+	if err := c.BindQuery(&q); err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	// 获取群聊成员邀请统计
+	stats, err := s.db.GetChatRoomMemberInviteStats(chatRoomName)
+	if err != nil {
+		errors.Err(c, err)
+		return
+	}
+
+	// 根据格式返回数据
+	format := strings.ToLower(q.Format)
+	switch format {
+	case "json":
+		c.JSON(http.StatusOK, stats)
+	case "csv":
+		c.Writer.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Flush()
+
+		c.Writer.WriteString("UserName,DisplayName,NickName,Inviter,InviteCount\n")
+		for _, stat := range stats.Stats {
+			c.Writer.WriteString(fmt.Sprintf("%s,%s,%s,%s,%d\n", stat.UserName, stat.DisplayName, stat.NickName, stat.Inviter, stat.InviteCount))
 		}
 		c.Writer.Flush()
 	default:

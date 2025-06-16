@@ -674,7 +674,8 @@ func (ds *DataSource) GetMedia(ctx context.Context, _type string, key string) (*
 }
 
 // GetChatRoomMemberStats 获取群聊成员发言统计
-func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+// GetChatRoomMemberMessageStats 获取群聊成员发言统计
+func (ds *DataSource) GetChatRoomMemberMessageStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberMessageStats, error) {
 	if chatRoomName == "" {
 		return nil, errors.ErrTalkerEmpty
 	}
@@ -685,7 +686,7 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 		return nil, errors.TimeRangeNotFound(startTime, endTime)
 	}
 
-	stats := []*model.ChatRoomMemberStats{}
+	stats := []*model.ChatRoomMemberMessageStats{}
 	messageCountMap := make(map[string]int)
 
 	// 从每个相关数据库中查询消息统计
@@ -772,7 +773,7 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 			smallHeadUrl = contact.HeadImg
 		}
 
-		stat := &model.ChatRoomMemberStats{
+		stat := &model.ChatRoomMemberMessageStats{
 			UserName:     sender,
 			DisplayName:  displayName,
 			NickName:     nickName,
@@ -788,6 +789,84 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 	})
 
 	return stats, nil
+}
+
+// GetChatRoomMemberInviteStats 获取群聊成员邀请统计
+func (ds *DataSource) GetChatRoomMemberInviteStats(ctx context.Context, chatRoomName string) ([]*model.ChatRoomMemberInviteStats, error) {
+	if chatRoomName == "" {
+		return nil, errors.ErrTalkerEmpty
+	}
+
+	// 获取群聊信息以获取邀请关系
+	chatRooms, err := ds.GetChatRooms(ctx, chatRoomName, 1, 0)
+	if err != nil {
+		return nil, err
+	}
+	var chatRoom *model.ChatRoom
+	if len(chatRooms) > 0 {
+		chatRoom = chatRooms[0]
+	}
+
+	if chatRoom == nil {
+		return []*model.ChatRoomMemberInviteStats{}, nil
+	}
+
+	stats := []*model.ChatRoomMemberInviteStats{}
+	inviterMap := make(map[string]string)     // 用户 -> 邀请人
+	inviteCountMap := make(map[string]int)   // 邀请人 -> 邀请人数
+
+	// 构建邀请统计映射
+	for _, user := range chatRoom.Users {
+		if user.Inviter != "" {
+			inviterMap[user.UserName] = user.Inviter
+			inviteCountMap[user.Inviter]++
+		}
+	}
+
+	// 为所有群成员创建邀请统计
+	for _, user := range chatRoom.Users {
+		// 从联系人表获取详细信息
+		contacts, err := ds.GetContacts(ctx, user.UserName, 1, 0)
+		var displayName, nickName, smallHeadUrl string
+		if err == nil && len(contacts) > 0 {
+			contact := contacts[0]
+			displayName = contact.Remark
+			if displayName == "" {
+				displayName = contact.NickName
+			}
+			if displayName == "" {
+				displayName = user.UserName
+			}
+			nickName = contact.NickName
+			smallHeadUrl = contact.HeadImg
+		}
+
+		// 获取邀请信息
+		inviter := inviterMap[user.UserName]
+		inviteCount := inviteCountMap[user.UserName]
+
+		stat := &model.ChatRoomMemberInviteStats{
+			UserName:     user.UserName,
+			DisplayName:  displayName,
+			NickName:     nickName,
+			SmallHeadUrl: smallHeadUrl,
+			Inviter:      inviter,
+			InviteCount:  inviteCount,
+		}
+		stats = append(stats, stat)
+	}
+
+	// 按邀请人数降序排序
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].InviteCount > stats[j].InviteCount
+	})
+
+	return stats, nil
+}
+
+// GetChatRoomMemberStats 为了向后兼容，保留原有方法名
+func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+	return ds.GetChatRoomMemberMessageStats(ctx, chatRoomName, startTime, endTime)
 }
 
 func (ds *DataSource) GetVoice(ctx context.Context, key string) (*model.Media, error) {

@@ -125,7 +125,19 @@ func (w *DB) GetMedia(_type string, key string) (*model.Media, error) {
 	return w.repo.GetMedia(context.Background(), _type, key)
 }
 
-// GetChatRoomMemberStats 获取群聊成员发言统计
+// GetChatRoomMemberMessageStats 获取群聊成员发言统计
+func (w *DB) GetChatRoomMemberMessageStats(chatRoomName string, start, end time.Time) (*model.GetChatRoomMemberMessageStatsResp, error) {
+	ctx := context.Background()
+	return w.repo.GetChatRoomMemberMessageStats(ctx, chatRoomName, start, end)
+}
+
+// GetChatRoomMemberInviteStats 获取群聊成员邀请统计
+func (w *DB) GetChatRoomMemberInviteStats(chatRoomName string) (*model.GetChatRoomMemberInviteStatsResp, error) {
+	ctx := context.Background()
+	return w.repo.GetChatRoomMemberInviteStats(ctx, chatRoomName)
+}
+
+// GetChatRoomMemberStats 为了向后兼容，保留原有方法名
 func (w *DB) GetChatRoomMemberStats(chatRoomName string, start, end time.Time) (*model.GetChatRoomMemberStatsResp, error) {
 	ctx := context.Background()
 	return w.repo.GetChatRoomMemberStats(ctx, chatRoomName, start, end)

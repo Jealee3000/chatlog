@@ -724,7 +724,8 @@ func (ds *DataSource) GetMedia(ctx context.Context, _type string, key string) (*
 }
 
 // GetChatRoomMemberStats 获取群聊成员发言统计
-func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+// GetChatRoomMemberMessageStats 获取群聊成员发言统计
+func (ds *DataSource) GetChatRoomMemberMessageStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberMessageStats, error) {
 	if chatRoomName == "" {
 		return nil, errors.ErrTalkerEmpty
 	}
@@ -751,7 +752,7 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 	}
 	defer rows.Close()
 
-	stats := []*model.ChatRoomMemberStats{}
+	stats := []*model.ChatRoomMemberMessageStats{}
 	for rows.Next() {
 		var sender string
 		var messageCount int
@@ -760,7 +761,7 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 			continue
 		}
 
-		stat := &model.ChatRoomMemberStats{
+		stat := &model.ChatRoomMemberMessageStats{
 			UserName:     sender,
 			DisplayName:  sender, // 暂时使用sender作为显示名称
 			NickName:     "",     // 需要从联系人信息中获取
@@ -770,6 +771,17 @@ func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName s
 	}
 
 	return stats, nil
+}
+
+// GetChatRoomMemberInviteStats 获取群聊成员邀请统计 (windowsv3版本暂不支持)
+func (ds *DataSource) GetChatRoomMemberInviteStats(ctx context.Context, chatRoomName string) ([]*model.ChatRoomMemberInviteStats, error) {
+	// windowsv3版本暂不支持邀请统计功能
+	return []*model.ChatRoomMemberInviteStats{}, nil
+}
+
+// GetChatRoomMemberStats 为了向后兼容，保留原有方法名
+func (ds *DataSource) GetChatRoomMemberStats(ctx context.Context, chatRoomName string, startTime, endTime time.Time) ([]*model.ChatRoomMemberStats, error) {
+	return ds.GetChatRoomMemberMessageStats(ctx, chatRoomName, startTime, endTime)
 }
 
 func (ds *DataSource) GetVoice(ctx context.Context, key string) (*model.Media, error) {

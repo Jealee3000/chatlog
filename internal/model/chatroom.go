@@ -21,6 +21,7 @@ type ChatRoom struct {
 type ChatRoomUser struct {
 	UserName    string `json:"userName"`
 	DisplayName string `json:"displayName"`
+	Inviter     string `json:"inviter"`
 }
 
 // CREATE TABLE ChatRoom(
@@ -98,6 +99,9 @@ func ParseRoomData(b []byte) (users []ChatRoomUser) {
 		u := ChatRoomUser{UserName: user.UserName}
 		if user.DisplayName != nil {
 			u.DisplayName = *user.DisplayName
+		}
+		if user.Inviter != nil {
+			u.Inviter = *user.Inviter
 		}
 		users = append(users, u)
 	}
